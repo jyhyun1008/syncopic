@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SYNCOPIC</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  }
+
+  #checker {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%, #999),
+      linear-gradient(45deg, #999 25%, #ccc 25%, #ccc 75%, #999 75%, #999);
+    background-size: 24px 24px;
+    background-position: 0 0, 12px 12px;
+    display: none;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+  .stageItem {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+    user-select: none;
+  }
+  #stage.editing .stageItem {
+    pointer-events: auto;
+    cursor: move;
+    outline: 1px dashed rgba(80,160,255,0.85);
+  }
+  .stageItem img {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+  }
+  .stageItem .placeholder {
+    width: 100%;
+    aspect-ratio: 3/4;
+    border: 2px dashed rgba(128,128,128,0.5);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(128,128,128,0.9);
+    font-size: 14px;
+    text-align: center;
+    padding: 10px;
+    box-sizing: border-box;
+    background: rgba(0,0,0,0.04);
+    pointer-events: none;
+  }
+  .resizeHandle {
+    position: absolute;
+    right: -7px;
+    bottom: -7px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #3b6dd8;
+    border: 2px solid #fff;
+    cursor: nwse-resize;
+    display: none;
+  }
+  #stage.editing .resizeHandle {
+    display: block;
+    pointer-events: auto;
+  }
+
+  #gear {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 30;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(30,30,30,0.55);
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 36px;
+    text-align: center;
+  }
+  #gear:hover { background: rgba(30,30,30,0.85); }
+
+  #panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 460px;
+    max-width: 94vw;
+    height: 100%;
+    background: rgba(20,20,24,0.96);
+    color: #eee;
+    box-sizing: border-box;
+    padding: 50px 16px 16px 16px;
+    overflow-y: auto;
+    z-index: 25;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    box-shadow: -2px 0 12px rgba(0,0,0,0.4);
+    font-size: 13px;
+  }
+  #panel.open { transform: translateX(0); }
+
+  #panel h2 {
+    font-size: 14px;
+    margin: 18px 0 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    padding-bottom: 4px;
+    color: #fff;
+  }
+  #panel h2:first-of-type { margin-top: 0; }
+
+  .appTitle {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+
+  #panel label { display: block; margin: 8px 0 2px 0; color: #ccc; }
+  #panel .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #panel .row span.val { min-width: 46px; text-align: right; color: #9cf; font-variant-numeric: tabular-nums; }
+  #panel input[type="range"] { flex: 1; }
+  #panel input[type="text"], #panel select, #panel button, #panel input[type="file"] {
+    width: 100%;
+    box-sizing: border-box;
+    background: #2a2a30;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  #panel button { cursor: pointer; }
+  #panel button:hover { background: #3a3a42; }
+  #panel button.primary { background: #3b6dd8; border-color: #3b6dd8; }
+  #panel button.primary:hover { background: #4b7ce8; }
+  #panel button.danger { background: #7a2e2e; border-color: #7a2e2e; }
+  #panel button.small { width: auto; display: inline-block; padding: 4px 8px; margin: 2px 4px 2px 0; }
+
+  .hint { color: #888; font-size: 11px; line-height: 1.5; margin-top: 4px; }
+
+  #previewWrap {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border: 1px solid #444;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    line-height: 0;
+  }
+  #previewCanvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    cursor: crosshair;
+  }
+  #captureStatus {
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #333;
+    color: #aaa;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  #captureStatus.live { background: #1f5c2e; color: #bfffcf; }
+
+  .charcard {
+    background: #26262c;
+    border: 1px solid #3a3a42;
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+  .charcard .top { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .charcard .top input[type="text"] { margin: 0; flex: 1; }
+  .charcard .imgpair { display: flex; gap: 6px; margin-bottom: 6px; }
+  .charcard .imgpair .slot { flex: 1; text-align: center; }
+  .charcard .thumb {
+    width: 100%;
+    aspect-ratio: 1;
+    background: #111;
+    border: 1px solid #444;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .charcard .thumb img { max-width: 100%; max-height: 100%; }
+  .charcard .thumb .none { color: #666; font-size: 10px; }
+  .charcard .thumb input[type="file"] {
+    all: unset;
+    display: block;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    font-size: 10px;
+    color: #666;
+    text-align: center;
+    cursor: pointer;
+  }
+  .charcard .statusrow { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #aaa; }
+  .charcard .dot { width: 10px; height: 10px; border-radius: 50%; background: #555; flex-shrink: 0; }
+  .charcard .dot.on { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+  .charcard .scorebar {
+    flex: 1;
+    height: 8px;
+    background: #111;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #444;
+  }
+  .charcard .scorebar > div { height: 100%; width: 0%; background: linear-gradient(90deg,#3fb950,#d4b62c,#d63a3a); }
+  .charcard.arming { outline: 2px solid #3b6dd8; }
+  .layerRow { display: flex; gap: 4px; margin-bottom: 6px; }
+  .layerRow button { flex: 1; margin: 0; font-size: 10px; padding: 4px 2px; }
+
+  .layerItemRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #26262c;
+    border: 1px solid #3a3a42;
+    border-radius: 8px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+  }
+  .layerItemRow .layerThumb {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    background: #111;
+    border: 1px solid #444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-size: 14px;
+  }
+  .layerItemRow .layerThumb img { max-width: 100%; max-height: 100%; }
+  .layerItemRow .layerLabel { flex: 1; min-width: 0; font-size: 12px; }
+  .layerItemRow .layerLabel .tag { color: #888; font-size: 10px; display: block; }
+  .layerItemRow .layerLabel .name { color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layerItemRow .layerRow { margin-bottom: 0; width: 168px; flex-shrink: 0; }
+
+</style>
+</head>
+<body>
+
+<div id="checker"></div>
+<div id="stage"></div>
+<button id="gear" title="설정">⚙</button>
+
+<div id="panel">
+
+  <div class="appTitle">SYNCOPIC</div>
+
+  <h2>1. 화면 캡처</h2>
+  <div id="captureStatus">캡처되지 않음</div>
+  <button id="captureBtn" class="primary">SYNCROOM 화면 캡처 시작</button>
+  <div id="previewWrap" style="display:none;">
+    <canvas id="previewCanvas"></canvas>
+  </div>
+  <div id="cropStatus" class="hint" style="color:#9cf;">자르기 없음 (전체 화면 표시 중)</div>
+  <button id="cropDefineBtn">자르기 영역 지정 (사이드바 등 제외)</button>
+  <button id="cropCancelBtn" style="display:none;">취소</button>
+  <button id="cropResetBtn">자르기 초기화 (전체 화면 다시 보기)</button>
+  <div class="hint">
+    SYNCROOM 창(여러 참가자의 트랙 미터가 보이는 화면)을 공유하세요. 미리보기가 너무 좁아서
+    레벨미터가 잘 안 보이면, 먼저 "자르기 영역 지정"으로 사이드바 등을 빼고 트랙 목록만
+    남겨서 확대해 보세요. 그다음 아래 캐릭터 카드에서 "영역 지정"을 누르고 위 미리보기에서
+    해당 참가자의 레벨미터 부분을 드래그하면 됩니다. (자르기를 다시 지정하면 기존 캐릭터
+    영역은 초기화됩니다.)
+  </div>
+
+  <h2>2. 캐릭터</h2>
+  <button id="addCharBtn">+ 캐릭터 추가</button>
+  <div id="charList"></div>
+  <div class="hint">
+    화면(왼쪽, 패널 바깥)에 배치된 캐릭터를 마우스로 드래그하면 위치를 옮길 수 있고, 우측 하단의
+    파란 점을 드래그하면 크기가 바뀝니다. 이 패널이 열려있는 동안만 드래그가 가능합니다.
+  </div>
+
+  <h2>3. 오브젝트 (배경/소품 이미지)</h2>
+  <button id="addObjBtn">+ 오브젝트 추가</button>
+  <div id="objList"></div>
+  <div class="hint">
+    소리에 반응하지 않는 고정 이미지입니다(배경, 악기, 로고 등). 캐릭터와 마찬가지로
+    드래그로 위치/크기를 조절할 수 있습니다.
+  </div>
+
+  <h2>4. 감도 설정</h2>
+  <div class="row">
+    <label style="margin:0; width:100px;">활성 판정 픽셀수</label>
+    <input type="range" id="activityRange" min="1" max="200" value="6" step="1">
+    <span class="val" id="activityVal">6px</span>
+  </div>
+  <div class="row">
+    <label style="margin:0; width:100px;">초록 판정 여유값</label>
+    <input type="range" id="greenMarginRange" min="5" max="100" value="25" step="5">
+    <span class="val" id="greenMarginVal">25</span>
+  </div>
+  <div class="row">
+    <label style="margin:0; width:100px;">유지 시간</label>
+    <input type="range" id="holdRange" min="50" max="1500" value="350" step="50">
+    <span class="val" id="holdVal">350ms</span>
+  </div>
+  <div class="hint">
+    기준색 보정 없이, 영역 안에서 "초록색(레벨미터 색)"으로 판정되는 샘플 픽셀의 개수를 직접
+    셉니다. 그 개수가 "활성 판정 픽셀수"를 넘으면 "연주 중"으로 판단합니다. "초록 판정
+    여유값"이 낮을수록 연한 초록/노란빛이 도는 픽셀도 초록으로 인정해 더 민감해지고,
+    높을수록 뚜렷한 초록색만 인정해 더 엄격해집니다. 레벨미터가 매우 얇다면 "활성 판정
+    픽셀수"를 낮추세요. "유지 시간"은 짧은 끊김에 이미지가 깜빡이지 않도록 합니다.
+  </div>
+
+  <h2>5. 레이어</h2>
+  <div id="layerList"></div>
+  <div class="hint">
+    캐릭터와 오브젝트를 한 화면에서 앞/뒤 순서로 모아 보여줍니다. 목록 맨 위가 화면에서 가장
+    앞(위)에 그려집니다.
+  </div>
+
+  <h2>6. 화면</h2>
+  <label>배경 모드</label>
+  <select id="bgModeSelect">
+    <option value="transparent">투명 (OBS 알파 배경, 기본)</option>
+    <option value="color">단색 (크로마키용)</option>
+    <option value="image">이미지</option>
+  </select>
+
+  <div id="bgColorRow" class="row" style="display:none;">
+    <label style="margin:0; width:70px;">배경색</label>
+    <input type="color" id="bgColorInput" value="#00ff00" style="flex:0 0 60px; height:32px; padding:2px;">
+    <span class="hint" style="margin:0;">크로마키용은 보통 초록(#00ff00) 또는 파랑(#0000ff)을 씁니다.</span>
+  </div>
+
+  <div id="bgImageRow" style="display:none;">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <div class="thumb" id="bgImageThumb" style="width:60px; height:60px; flex-shrink:0;"><span class="none">없음</span></div>
+      <input type="file" id="bgImageInput" accept="image/*,.gif" style="flex:1;">
+    </div>
+  </div>
+
+  <div class="hint">
+    "투명"은 OBS 브라우저 소스에서 진짜 알파 투명 배경으로 캡처됩니다(권장). "단색"은 OBS에서
+    크로마키(색상 키) 필터로 배경을 지울 때 쓰거나, 이 페이지 자체를 방송 화면으로 쓸 때
+    유용합니다. "이미지"는 배경 그림을 깔아줍니다. 캡처 중인 이 설정 패널 자체는 OBS 화면에는
+    필요 없으니 방송 중에는 톱니바퀴로 닫아두세요(닫아도 캡처/감지는 계속 동작합니다).
+  </div>
+
+  <button id="resetBtn" style="margin-top:14px;">모든 설정 초기화</button>
+</div>
+
+<video id="hiddenVideo" style="display:none;" muted playsinline></video>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+
+  const stage = $('stage');
+  const gear = $('gear');
+  const panel = $('panel');
+  const checker = $('checker');
+  const bgModeSelect = $('bgModeSelect');
+  const bgColorRow = $('bgColorRow');
+  const bgColorInput = $('bgColorInput');
+  const bgImageRow = $('bgImageRow');
+  const bgImageInput = $('bgImageInput');
+  const bgImageThumb = $('bgImageThumb');
+
+  const captureBtn = $('captureBtn');
+  const captureStatus = $('captureStatus');
+  const previewWrap = $('previewWrap');
+  const previewCanvas = $('previewCanvas');
+  const previewCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
+  const hiddenVideo = $('hiddenVideo');
+  const cropStatus = $('cropStatus');
+  const cropDefineBtn = $('cropDefineBtn');
+  const cropCancelBtn = $('cropCancelBtn');
+  const cropResetBtn = $('cropResetBtn');
+
+  const addCharBtn = $('addCharBtn');
+  const charList = $('charList');
+  const addObjBtn = $('addObjBtn');
+  const objList = $('objList');
+  const layerList = $('layerList');
+
+  const activityRange = $('activityRange');
+  const activityVal = $('activityVal');
+  const greenMarginRange = $('greenMarginRange');
+  const greenMarginVal = $('greenMarginVal');
+  const holdRange = $('holdRange');
+  const holdVal = $('holdVal');
+
+  const resetBtn = $('resetBtn');
+
+  const STORAGE_KEY = 'syncroom-scene-settings-v1';
+
+  const defaultSettings = {
+    activityThreshold: 6,
+    greenMargin: 25,
+    holdMs: 350,
+    background: { mode: 'transparent', color: '#00ff00', image: null },
+    cropRegion: null,
+    characters: [],
+    objects: [],
+    zCounter: 0,
+  };
+
+  let settings = loadSettings();
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return JSON.parse(JSON.stringify(defaultSettings));
+      const parsed = JSON.parse(raw);
+      return { ...JSON.parse(JSON.stringify(defaultSettings)), ...parsed };
+    } catch (e) {
+      return JSON.parse(JSON.stringify(defaultSettings));
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.warn('설정 저장 실패(이미지 용량이 너무 클 수 있음):', e);
+    }
+  }
+
+  function uid() {
+    return 'c' + Math.random().toString(36).slice(2, 10);
+  }
+
+  // ---------- panel toggle ----------
+  gear.addEventListener('click', () => {
+    panel.classList.toggle('open');
+    stage.classList.toggle('editing', panel.classList.contains('open'));
+  });
+
+  // ---------- background (transparent / solid color / image) ----------
+  function applyBackground() {
+    const bg = settings.background;
+    bgModeSelect.value = bg.mode;
+    bgColorRow.style.display = bg.mode === 'color' ? '' : 'none';
+    bgImageRow.style.display = bg.mode === 'image' ? '' : 'none';
+    bgColorInput.value = bg.color;
+    bgImageThumb.innerHTML = '';
+    if (bg.image) {
+      const im = document.createElement('img');
+      im.src = bg.image;
+      im.style.maxWidth = '100%';
+      im.style.maxHeight = '100%';
+      bgImageThumb.appendChild(im);
+    } else {
+      const span = document.createElement('span');
+      span.className = 'none';
+      span.textContent = '없음';
+      bgImageThumb.appendChild(span);
+    }
+
+    if (bg.mode === 'color') {
+      document.body.style.background = bg.color;
+      checker.style.display = 'none';
+    } else if (bg.mode === 'image' && bg.image) {
+      document.body.style.background = `url(${bg.image}) center / cover no-repeat`;
+      checker.style.display = 'none';
+    } else {
+      document.body.style.background = 'transparent';
+      checker.style.display = 'block';
+    }
+  }
+
+  bgModeSelect.addEventListener('change', () => {
+    settings.background.mode = bgModeSelect.value;
+    saveSettings();
+    applyBackground();
+  });
+  bgColorInput.addEventListener('input', () => {
+    settings.background.color = bgColorInput.value;
+    saveSettings();
+    applyBackground();
+  });
+  bgImageInput.addEventListener('change', async () => {
+    if (!bgImageInput.files[0]) return;
+    settings.background.image = await fileToDataURL(bgImageInput.files[0]);
+    saveSettings();
+    applyBackground();
+  });
+
+  // ---------- global sliders ----------
+  function syncSliders() {
+    activityRange.value = settings.activityThreshold;
+    activityVal.textContent = settings.activityThreshold + 'px';
+    greenMarginRange.value = settings.greenMargin;
+    greenMarginVal.textContent = settings.greenMargin;
+    holdRange.value = settings.holdMs;
+    holdVal.textContent = settings.holdMs + 'ms';
+  }
+  activityRange.addEventListener('input', () => {
+    settings.activityThreshold = parseInt(activityRange.value, 10);
+    activityVal.textContent = settings.activityThreshold + 'px';
+    saveSettings();
+  });
+  greenMarginRange.addEventListener('input', () => {
+    settings.greenMargin = parseInt(greenMarginRange.value, 10);
+    greenMarginVal.textContent = settings.greenMargin;
+    saveSettings();
+  });
+  holdRange.addEventListener('input', () => {
+    settings.holdMs = parseInt(holdRange.value, 10);
+    holdVal.textContent = settings.holdMs + 'ms';
+    saveSettings();
+  });
+
+  // ---------- runtime (non-persisted) per-character state ----------
+  const runtime = {}; // id -> { playing, lastActiveTime, score }
+  function ensureRuntime(id) {
+    if (!runtime[id]) runtime[id] = { playing: false, lastActiveTime: 0, score: 0 };
+    return runtime[id];
+  }
+
+  // ---------- stage rendering (free-form drag/resize positioning + z-order) ----------
+  function ensurePosition(o, defaults) {
+    let changed = false;
+    if (typeof o.x !== 'number') { o.x = defaults.x; changed = true; }
+    if (typeof o.y !== 'number') { o.y = defaults.y; changed = true; }
+    if (typeof o.w !== 'number') { o.w = defaults.w; changed = true; }
+    return changed;
+  }
+
+  function ensureZ(o) {
+    if (typeof o.z !== 'number') {
+      settings.zCounter = (settings.zCounter || 0) + 1;
+      o.z = settings.zCounter;
+      return true;
+    }
+    return false;
+  }
+
+  // Combined stacking order across BOTH characters and objects, sorted by z
+  // ascending (index 0 = furthest back). Reordering swaps `z` values so the
+  // same list works whether the neighbor is a character or an object.
+  function getLayerItems() {
+    let changed = false;
+    const items = [];
+    settings.objects.forEach((o) => { if (ensureZ(o)) changed = true; items.push({ kind: 'obj', obj: o }); });
+    settings.characters.forEach((o) => { if (ensureZ(o)) changed = true; items.push({ kind: 'char', obj: o }); });
+    items.sort((a, b) => a.obj.z - b.obj.z);
+    if (changed) saveSettings();
+    return items;
+  }
+
+  function bringForward(o) {
+    const items = getLayerItems();
+    const idx = items.findIndex(it => it.obj === o);
+    if (idx === -1 || idx === items.length - 1) return;
+    const next = items[idx + 1].obj;
+    const tmp = o.z; o.z = next.z; next.z = tmp;
+    saveSettings();
+    renderStage();
+  }
+  function sendBackward(o) {
+    const items = getLayerItems();
+    const idx = items.findIndex(it => it.obj === o);
+    if (idx <= 0) return;
+    const prev = items[idx - 1].obj;
+    const tmp = o.z; o.z = prev.z; prev.z = tmp;
+    saveSettings();
+    renderStage();
+  }
+  function bringToFront(o) {
+    const items = getLayerItems();
+    o.z = Math.max(...items.map(it => it.obj.z)) + 1;
+    saveSettings();
+    renderStage();
+  }
+  function sendToBack(o) {
+    const items = getLayerItems();
+    o.z = Math.min(...items.map(it => it.obj.z)) - 1;
+    saveSettings();
+    renderStage();
+  }
+
+  function buildLayerButtons(o) {
+    const row = document.createElement('div');
+    row.className = 'layerRow';
+    const mk = (label, title, fn) => {
+      const b = document.createElement('button');
+      b.className = 'small';
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener('click', () => fn(o));
+      return b;
+    };
+    row.appendChild(mk('맨뒤', '맨 뒤로 보내기', sendToBack));
+    row.appendChild(mk('▽뒤로', '한 칸 뒤로', sendBackward));
+    row.appendChild(mk('앞으로△', '한 칸 앞으로', bringForward));
+    row.appendChild(mk('맨앞', '맨 앞으로 보내기', bringToFront));
+    return row;
+  }
+
+  function buildStageItem(kind, o, innerBuilder) {
+    const item = document.createElement('div');
+    item.className = 'stageItem';
+    item.dataset.kind = kind;
+    item.dataset.id = o.id;
+    item.style.left = o.x + '%';
+    item.style.top = o.y + '%';
+    item.style.width = o.w + '%';
+    innerBuilder(item);
+    const handle = document.createElement('div');
+    handle.className = 'resizeHandle';
+    item.appendChild(handle);
+    return item;
+  }
+
+  function charInner(ch, item) {
+    const rt = ensureRuntime(ch.id);
+    const src = rt.playing ? (ch.talkImg || ch.idleImg) : (ch.idleImg || ch.talkImg);
+    if (src) {
+      const im = document.createElement('img');
+      im.src = src;
+      item.appendChild(im);
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'placeholder';
+      ph.textContent = ch.name || '캐릭터';
+      item.appendChild(ph);
+    }
+  }
+
+  function objInner(obj, item) {
+    if (obj.img) {
+      const im = document.createElement('img');
+      im.src = obj.img;
+      item.appendChild(im);
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'placeholder';
+      ph.textContent = obj.name || '오브젝트';
+      item.appendChild(ph);
+    }
+  }
+
+  function renderStage() {
+    stage.innerHTML = '';
+    let changed = false;
+    const items = getLayerItems(); // back-to-front order
+    items.forEach(({ kind, obj }, i) => {
+      if (kind === 'obj') {
+        if (ensurePosition(obj, { x: 5 + (i % 4) * 5, y: 5 + (i % 4) * 5, w: 20 })) changed = true;
+        const el = buildStageItem('obj', obj, (item) => objInner(obj, item));
+        el.style.zIndex = i;
+        stage.appendChild(el);
+      } else {
+        if (ensurePosition(obj, { x: 10 + (i % 5) * 16, y: 40, w: 22 })) changed = true;
+        const el = buildStageItem('char', obj, (item) => charInner(obj, item));
+        el.style.zIndex = i;
+        stage.appendChild(el);
+      }
+    });
+    if (changed) saveSettings();
+    renderLayerList();
+  }
+
+  function renderLayerList() {
+    layerList.innerHTML = '';
+    const items = getLayerItems().slice().reverse(); // front-to-back for display
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'hint';
+      empty.textContent = '아직 캐릭터나 오브젝트가 없습니다.';
+      layerList.appendChild(empty);
+      return;
+    }
+    items.forEach(({ kind, obj }) => {
+      const row = document.createElement('div');
+      row.className = 'layerItemRow';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'layerThumb';
+      const src = kind === 'char' ? (obj.talkImg || obj.idleImg) : obj.img;
+      if (src) {
+        const im = document.createElement('img');
+        im.src = src;
+        thumb.appendChild(im);
+      } else {
+        thumb.textContent = kind === 'char' ? '🧑' : '🖼';
+      }
+      row.appendChild(thumb);
+
+      const label = document.createElement('div');
+      label.className = 'layerLabel';
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = kind === 'char' ? '캐릭터' : '오브젝트';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = obj.name || '(이름 없음)';
+      label.appendChild(tag);
+      label.appendChild(name);
+      row.appendChild(label);
+
+      row.appendChild(buildLayerButtons(obj));
+      layerList.appendChild(row);
+    });
+  }
+
+  function updateStageImage(ch) {
+    const item = stage.querySelector(`.stageItem[data-kind="char"][data-id="${ch.id}"]`);
+    if (!item) return;
+    const handle = item.querySelector('.resizeHandle');
+    item.innerHTML = '';
+    charInner(ch, item);
+    if (handle) item.appendChild(handle);
+  }
+
+  function applyItemStyle(kind, o) {
+    const item = stage.querySelector(`.stageItem[data-kind="${kind}"][data-id="${o.id}"]`);
+    if (!item) return;
+    item.style.left = o.x + '%';
+    item.style.top = o.y + '%';
+    item.style.width = o.w + '%';
+  }
+
+  // ---------- stage drag-to-move / drag-to-resize (only while panel is open) ----------
+  let stageDrag = null;
+
+  stage.addEventListener('mousedown', (evt) => {
+    if (!stage.classList.contains('editing')) return;
+    const item = evt.target.closest('.stageItem');
+    if (!item) return;
+    const kind = item.dataset.kind;
+    const id = item.dataset.id;
+    const list = kind === 'char' ? settings.characters : settings.objects;
+    const obj = list.find(o => o.id === id);
+    if (!obj) return;
+    const isResize = !!evt.target.closest('.resizeHandle');
+    const stageRect = stage.getBoundingClientRect();
+    stageDrag = {
+      kind, obj, mode: isResize ? 'resize' : 'move',
+      startClientX: evt.clientX, startClientY: evt.clientY,
+      startX: obj.x, startY: obj.y, startW: obj.w,
+      stageW: stageRect.width, stageH: stageRect.height,
+    };
+    evt.preventDefault();
+  });
+  window.addEventListener('mousemove', (evt) => {
+    if (!stageDrag) return;
+    const dxPct = (evt.clientX - stageDrag.startClientX) / stageDrag.stageW * 100;
+    const dyPct = (evt.clientY - stageDrag.startClientY) / stageDrag.stageH * 100;
+    if (stageDrag.mode === 'move') {
+      stageDrag.obj.x = stageDrag.startX + dxPct;
+      stageDrag.obj.y = stageDrag.startY + dyPct;
+    } else {
+      stageDrag.obj.w = Math.max(4, stageDrag.startW + dxPct);
+    }
+    applyItemStyle(stageDrag.kind, stageDrag.obj);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!stageDrag) return;
+    saveSettings();
+    stageDrag = null;
+  });
+
+  // ---------- crop (limit preview to part of the screen, e.g. exclude sidebar) ----------
+  let cropDefineMode = false;
+
+  function updateCropUI() {
+    cropCancelBtn.style.display = cropDefineMode ? '' : 'none';
+    if (cropDefineMode) {
+      cropStatus.textContent = '미리보기에서 남길 영역을 드래그하세요...';
+      cropDefineBtn.textContent = '드래그로 영역 선택 중...';
+    } else if (settings.cropRegion) {
+      cropStatus.textContent = `자르기 적용됨 (${settings.cropRegion.w}×${settings.cropRegion.h})`;
+      cropDefineBtn.textContent = '자르기 영역 다시 지정';
+    } else {
+      cropStatus.textContent = '자르기 없음 (전체 화면 표시 중)';
+      cropDefineBtn.textContent = '자르기 영역 지정 (사이드바 등 제외)';
+    }
+  }
+
+  cropDefineBtn.addEventListener('click', () => {
+    if (!currentStream) { alert('먼저 화면 캡처를 시작하세요.'); return; }
+    armingId = null;
+    cropDefineMode = true;
+    updateCropUI();
+    renderCharList();
+  });
+  cropCancelBtn.addEventListener('click', () => {
+    cropDefineMode = false;
+    updateCropUI();
+  });
+  cropResetBtn.addEventListener('click', () => {
+    if (!settings.cropRegion) { updateCropUI(); return; }
+    if (!confirm('자르기를 초기화할까요? 기존에 지정한 캐릭터 영역들은 다시 지정해야 합니다.')) return;
+    settings.cropRegion = null;
+    settings.characters.forEach(ch => { ch.region = null; });
+    cropDefineMode = false;
+    saveSettings();
+    updateCropUI();
+    renderCharList();
+  });
+
+  // ---------- character card rendering ----------
+  let armingId = null; // character currently being region-assigned
+
+  function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderCharList() {
+    charList.innerHTML = '';
+    settings.characters.forEach((ch) => {
+      const rt = ensureRuntime(ch.id);
+      const card = document.createElement('div');
+      card.className = 'charcard' + (armingId === ch.id ? ' arming' : '');
+
+      const top = document.createElement('div');
+      top.className = 'top';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = '이름 (예: 연이나)';
+      nameInput.value = ch.name || '';
+      nameInput.addEventListener('input', () => {
+        ch.name = nameInput.value;
+        saveSettings();
+        updateStageImage(ch);
+      });
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '삭제';
+      delBtn.className = 'small danger';
+      delBtn.style.width = 'auto';
+      delBtn.addEventListener('click', () => {
+        if (!confirm(`"${ch.name || '이 캐릭터'}"를 삭제할까요?`)) return;
+        settings.characters = settings.characters.filter(c => c.id !== ch.id);
+        delete runtime[ch.id];
+        if (armingId === ch.id) armingId = null;
+        saveSettings();
+        renderCharList();
+        renderStage();
+      });
+      top.appendChild(nameInput);
+      top.appendChild(delBtn);
+      card.appendChild(top);
+
+      const imgpair = document.createElement('div');
+      imgpair.className = 'imgpair';
+      imgpair.appendChild(buildImageSlot(ch, 'talkImg', '연주 중'));
+      imgpair.appendChild(buildImageSlot(ch, 'idleImg', '대기 중'));
+      card.appendChild(imgpair);
+
+      const regionBtn = document.createElement('button');
+      regionBtn.textContent = ch.region
+        ? `영역 다시 지정 (${ch.region.w}x${ch.region.h})`
+        : '영역 지정 (미리보기에서 드래그)';
+      regionBtn.addEventListener('click', () => {
+        if (!currentStream) {
+          alert('먼저 화면 캡처를 시작하세요.');
+          return;
+        }
+        cropDefineMode = false;
+        updateCropUI();
+        armingId = (armingId === ch.id) ? null : ch.id;
+        renderCharList();
+      });
+      card.appendChild(regionBtn);
+
+      const statusrow = document.createElement('div');
+      statusrow.className = 'statusrow';
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (rt.playing ? ' on' : '');
+      const scorebar = document.createElement('div');
+      scorebar.className = 'scorebar';
+      const fill = document.createElement('div');
+      fill.style.width = Math.min(100, rt.score) + '%';
+      scorebar.appendChild(fill);
+      const scoreLabel = document.createElement('span');
+      scoreLabel.textContent = Math.round(rt.score) + 'px';
+      scoreLabel.style.minWidth = '32px';
+      scoreLabel.style.textAlign = 'right';
+      statusrow.appendChild(dot);
+      statusrow.appendChild(scorebar);
+      statusrow.appendChild(scoreLabel);
+      card.appendChild(statusrow);
+
+      if (!ch.region) {
+        const warn = document.createElement('div');
+        warn.className = 'hint';
+        warn.textContent = '⚠ 영역 지정이 필요합니다.';
+        card.appendChild(warn);
+      }
+
+      charList.appendChild(card);
+    });
+  }
+
+  function buildImageSlot(ch, key, label) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (ch[key]) {
+      const im = document.createElement('img');
+      im.src = ch[key];
+      thumb.appendChild(im);
+      thumb.title = '클릭해서 변경';
+      thumb.style.cursor = 'pointer';
+      thumb.addEventListener('click', () => triggerPick(ch, key));
+    } else {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*,.gif';
+      fileInput.addEventListener('change', async () => {
+        if (!fileInput.files[0]) return;
+        ch[key] = await fileToDataURL(fileInput.files[0]);
+        saveSettings();
+        renderCharList();
+        renderStage();
+      });
+      const span = document.createElement('span');
+      span.className = 'none';
+      span.textContent = label;
+      thumb.appendChild(span);
+      thumb.appendChild(fileInput);
+    }
+    const lbl = document.createElement('label');
+    lbl.style.margin = '0';
+    lbl.textContent = label;
+    slot.appendChild(thumb);
+    slot.appendChild(lbl);
+    return slot;
+  }
+
+  function triggerPick(ch, key) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*,.gif';
+    fileInput.addEventListener('change', async () => {
+      if (!fileInput.files[0]) return;
+      ch[key] = await fileToDataURL(fileInput.files[0]);
+      saveSettings();
+      renderCharList();
+      renderStage();
+    });
+    fileInput.click();
+  }
+
+  addCharBtn.addEventListener('click', () => {
+    const ch = { id: uid(), name: '', talkImg: null, idleImg: null, region: null };
+    settings.characters.push(ch);
+    saveSettings();
+    renderCharList();
+    renderStage();
+  });
+
+  // ---------- object cards (static, non-reactive images) ----------
+  function renderObjList() {
+    objList.innerHTML = '';
+    settings.objects.forEach((obj) => {
+      const card = document.createElement('div');
+      card.className = 'charcard';
+
+      const top = document.createElement('div');
+      top.className = 'top';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = '이름 (예: 배경, 드럼세트)';
+      nameInput.value = obj.name || '';
+      nameInput.addEventListener('input', () => {
+        obj.name = nameInput.value;
+        saveSettings();
+      });
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '삭제';
+      delBtn.className = 'small danger';
+      delBtn.style.width = 'auto';
+      delBtn.addEventListener('click', () => {
+        if (!confirm(`"${obj.name || '이 오브젝트'}"를 삭제할까요?`)) return;
+        settings.objects = settings.objects.filter(o => o.id !== obj.id);
+        saveSettings();
+        renderObjList();
+        renderStage();
+      });
+      top.appendChild(nameInput);
+      top.appendChild(delBtn);
+      card.appendChild(top);
+
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      thumb.style.width = '72px';
+      if (obj.img) {
+        const im = document.createElement('img');
+        im.src = obj.img;
+        thumb.appendChild(im);
+        thumb.title = '클릭해서 이미지 변경';
+        thumb.style.cursor = 'pointer';
+        thumb.addEventListener('click', () => pickObjectImage(obj));
+      } else {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*,.gif';
+        fileInput.addEventListener('change', async () => {
+          if (!fileInput.files[0]) return;
+          obj.img = await fileToDataURL(fileInput.files[0]);
+          saveSettings();
+          renderObjList();
+          renderStage();
+        });
+        const span = document.createElement('span');
+        span.className = 'none';
+        span.textContent = '이미지';
+        thumb.appendChild(span);
+        thumb.appendChild(fileInput);
+      }
+      card.appendChild(thumb);
+
+      objList.appendChild(card);
+    });
+  }
+
+  function pickObjectImage(obj) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*,.gif';
+    fileInput.addEventListener('change', async () => {
+      if (!fileInput.files[0]) return;
+      obj.img = await fileToDataURL(fileInput.files[0]);
+      saveSettings();
+      renderObjList();
+      renderStage();
+    });
+    fileInput.click();
+  }
+
+  addObjBtn.addEventListener('click', () => {
+    const obj = { id: uid(), name: '', img: null };
+    settings.objects.push(obj);
+    saveSettings();
+    renderObjList();
+    renderStage();
+  });
+
+  // ---------- screen capture ----------
+  let currentStream = null;
+  let rafId = null;
+  let lastDrawTime = 0;
+  const DRAW_INTERVAL_MS = 66; // ~15fps analysis
+
+  captureBtn.addEventListener('click', async () => {
+    if (currentStream) {
+      stopCapture();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      currentStream = stream;
+      hiddenVideo.srcObject = stream;
+      await hiddenVideo.play();
+      previewCanvas.width = hiddenVideo.videoWidth;
+      previewCanvas.height = hiddenVideo.videoHeight;
+      previewWrap.style.display = '';
+      captureStatus.textContent = '캡처 중';
+      captureStatus.classList.add('live');
+      captureBtn.textContent = '화면 캡처 중지';
+      stream.getVideoTracks()[0].addEventListener('ended', stopCapture);
+      loop();
+    } catch (e) {
+      alert('화면 캡처를 시작하지 못했습니다: ' + e.message);
+    }
+  });
+
+  function stopCapture() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+      currentStream = null;
+    }
+    hiddenVideo.srcObject = null;
+    previewWrap.style.display = 'none';
+    captureStatus.textContent = '캡처되지 않음';
+    captureStatus.classList.remove('live');
+    captureBtn.textContent = 'SYNCROOM 화면 캡처 시작';
+    armingId = null;
+    cropDefineMode = false;
+    updateCropUI();
+    Object.keys(runtime).forEach(id => { runtime[id].playing = false; runtime[id].score = 0; });
+    settings.characters.forEach(updateStageImage);
+    renderCharList();
+  }
+
+  // While defining a crop (or when no crop is set yet), the preview shows the
+  // full captured frame. Otherwise it shows only the cropped sub-rectangle,
+  // scaled up to fill the same on-screen preview area — this is what makes a
+  // thin meter bar much bigger and easier to drag-select precisely.
+  function currentSourceRect() {
+    if (cropDefineMode || !settings.cropRegion) {
+      return { x: 0, y: 0, w: hiddenVideo.videoWidth, h: hiddenVideo.videoHeight };
+    }
+    return settings.cropRegion;
+  }
+
+  function loop(ts) {
+    rafId = requestAnimationFrame(loop);
+    if (!currentStream) return;
+    if (ts - lastDrawTime < DRAW_INTERVAL_MS) return;
+    lastDrawTime = ts;
+
+    if (hiddenVideo.videoWidth && hiddenVideo.videoHeight) {
+      const src = currentSourceRect();
+      if (!src.w || !src.h) return;
+      if (previewCanvas.width !== src.w || previewCanvas.height !== src.h) {
+        previewCanvas.width = src.w;
+        previewCanvas.height = src.h;
+      }
+      previewCtx.drawImage(hiddenVideo, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
+      if (!cropDefineMode) runDetection();
+      drawOverlays();
+    }
+  }
+
+  const MIN_GREEN_BRIGHTNESS = 40; // ignore near-black pixels that technically pass the margin test
+
+  function computeActivityScore(region) {
+    // Returns the raw COUNT of sampled pixels that look like lit "green meter"
+    // pixels (G channel clearly above both R and B, and bright enough) — not a
+    // ratio, so a thin meter bar inside a loosely-drawn region still scores
+    // high when lit, instead of being diluted by unrelated background pixels.
+    try {
+      const data = previewCtx.getImageData(region.x, region.y, region.w, region.h).data;
+      const margin = settings.greenMargin;
+      let lit = 0;
+      const step = 4 * Math.max(1, Math.floor((region.w * region.h) / 4000));
+      for (let i = 0; i < data.length; i += step) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (g > MIN_GREEN_BRIGHTNESS && (g - r) > margin && (g - b) > margin) lit++;
+      }
+      return lit;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function runDetection() {
+    const now = performance.now();
+    settings.characters.forEach((ch) => {
+      if (!ch.region) return;
+      const rt = ensureRuntime(ch.id);
+      const score = computeActivityScore(ch.region);
+      rt.score = score;
+      const above = score > settings.activityThreshold;
+      if (above) rt.lastActiveTime = now;
+      const nextPlaying = above || (now - rt.lastActiveTime < settings.holdMs);
+      if (nextPlaying !== rt.playing) {
+        rt.playing = nextPlaying;
+        updateStageImage(ch);
+      }
+    });
+    // update just the score bars/dots without full re-render for perf
+    refreshCharListLiveNumbers();
+  }
+
+  function refreshCharListLiveNumbers() {
+    const cards = charList.querySelectorAll('.charcard');
+    if (cards.length !== settings.characters.length) return;
+    settings.characters.forEach((ch, i) => {
+      const rt = ensureRuntime(ch.id);
+      const card = cards[i];
+      const dot = card.querySelector('.dot');
+      const fill = card.querySelector('.scorebar > div');
+      const label = card.querySelector('.scorebar + span');
+      if (dot) dot.classList.toggle('on', rt.playing);
+      if (fill) fill.style.width = Math.min(100, rt.score) + '%';
+      if (label) label.textContent = Math.round(rt.score) + 'px';
+    });
+  }
+
+  function drawOverlays() {
+    if (cropDefineMode) {
+      if (dragState.active) {
+        previewCtx.lineWidth = 2;
+        previewCtx.strokeStyle = '#e8a33b';
+        previewCtx.setLineDash([6, 4]);
+        previewCtx.strokeRect(dragState.x, dragState.y, dragState.w, dragState.h);
+        previewCtx.setLineDash([]);
+      }
+      return;
+    }
+    settings.characters.forEach((ch) => {
+      if (!ch.region) return;
+      const rt = ensureRuntime(ch.id);
+      previewCtx.lineWidth = 2;
+      previewCtx.strokeStyle = ch.id === armingId ? '#3b6dd8' : (rt.playing ? '#3fb950' : '#999');
+      previewCtx.strokeRect(ch.region.x, ch.region.y, ch.region.w, ch.region.h);
+      if (ch.name) {
+        previewCtx.font = '14px sans-serif';
+        previewCtx.fillStyle = previewCtx.strokeStyle;
+        previewCtx.fillText(ch.name, ch.region.x + 2, Math.max(12, ch.region.y - 4));
+      }
+    });
+    if (dragState.active) {
+      previewCtx.lineWidth = 2;
+      previewCtx.strokeStyle = '#3b6dd8';
+      previewCtx.setLineDash([6, 4]);
+      previewCtx.strokeRect(dragState.x, dragState.y, dragState.w, dragState.h);
+      previewCtx.setLineDash([]);
+    }
+  }
+
+  // ---------- region drag selection on preview (shared by crop + character regions) ----------
+  const dragState = { active: false, startX: 0, startY: 0, x: 0, y: 0, w: 0, h: 0 };
+
+  function canvasCoords(evt) {
+    const rect = previewCanvas.getBoundingClientRect();
+    const scaleX = previewCanvas.width / rect.width;
+    const scaleY = previewCanvas.height / rect.height;
+    return {
+      x: (evt.clientX - rect.left) * scaleX,
+      y: (evt.clientY - rect.top) * scaleY,
+    };
+  }
+
+  previewCanvas.addEventListener('mousedown', (evt) => {
+    if (!cropDefineMode && !armingId) return;
+    const p = canvasCoords(evt);
+    dragState.active = true;
+    dragState.startX = p.x;
+    dragState.startY = p.y;
+    dragState.x = p.x; dragState.y = p.y; dragState.w = 0; dragState.h = 0;
+  });
+  previewCanvas.addEventListener('mousemove', (evt) => {
+    if (!dragState.active) return;
+    const p = canvasCoords(evt);
+    dragState.x = Math.min(dragState.startX, p.x);
+    dragState.y = Math.min(dragState.startY, p.y);
+    dragState.w = Math.abs(p.x - dragState.startX);
+    dragState.h = Math.abs(p.y - dragState.startY);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragState.active) return;
+    dragState.active = false;
+
+    if (cropDefineMode) {
+      if (dragState.w > 10 && dragState.h > 10) {
+        settings.cropRegion = {
+          x: Math.round(dragState.x), y: Math.round(dragState.y),
+          w: Math.round(dragState.w), h: Math.round(dragState.h),
+        };
+        settings.characters.forEach(ch => { ch.region = null; });
+        saveSettings();
+      }
+      cropDefineMode = false;
+      updateCropUI();
+      renderCharList();
+      return;
+    }
+
+    if (armingId && dragState.w > 4 && dragState.h > 4) {
+      const ch = settings.characters.find(c => c.id === armingId);
+      if (ch) {
+        ch.region = {
+          x: Math.round(dragState.x), y: Math.round(dragState.y),
+          w: Math.round(dragState.w), h: Math.round(dragState.h),
+        };
+        saveSettings();
+        renderCharList();
+      }
+    }
+    armingId = null;
+    renderCharList();
+  });
+
+  // ---------- reset ----------
+  resetBtn.addEventListener('click', () => {
+    if (!confirm('캐릭터, 이미지, 영역 등 모든 설정을 초기화할까요?')) return;
+    stopCapture();
+    settings = JSON.parse(JSON.stringify(defaultSettings));
+    Object.keys(runtime).forEach(k => delete runtime[k]);
+    cropDefineMode = false;
+    saveSettings();
+    syncSliders();
+    applyBackground();
+    updateCropUI();
+    renderCharList();
+    renderObjList();
+    renderStage();
+  });
+
+  // ---------- init ----------
+  syncSliders();
+  applyBackground();
+  updateCropUI();
+  renderCharList();
+  renderObjList();
+  renderStage();
+
+})();
+</script>
+
+</body>
+</html>
